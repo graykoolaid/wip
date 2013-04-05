@@ -140,8 +140,9 @@ void ProcessMesh( FbxNode* node )
 			// Get TexCoords
 			FbxVector2 texcoord = GetTexCoords( mesh, 0, i, j, vertexIndex );
 
-			// Get Binormals WIP USE AT OWN RISK
-			FbxGeometryElementBinormal* bin = mesh->GetElementBinormal(j);
+			// Get Binormals WIP USE AT OWN RISK THERE IS NO ERROR CHECKING HERE SO MUAHAHAHAHA
+			FbxGeometryElementBinormal* bin = mesh->GetElementBinormal(0);
+			FbxGeometryElementTangent* tan  = mesh->GetElementTangent(0);
 			
 
 			Vertex temp;
@@ -149,11 +150,14 @@ void ProcessMesh( FbxNode* node )
 			temp.Normal   = D3DXVECTOR3( normal[0], normal[1], normal[2] );
 			temp.Tex = D3DXVECTOR2( texcoord[0], 1.0 - texcoord[1] );
 			temp.texNum = tmpArray->GetAt(i) + TexCount;
-			temp.Tangent = temp.Pos;
+	//		temp.Tangent = temp.Pos;
+			temp.Tangent = D3DXVECTOR3( tan->GetDirectArray().GetAt(i)[0],
+										tan->GetDirectArray().GetAt(i)[1],
+										tan->GetDirectArray().GetAt(i)[2] );
 			
-			//temp.Tangent = D3DXVECTOR3( -temp.Normal.x, 0, temp.Normal.z );
-			temp.BiNormal;
-			D3DXVec3Cross( &temp.BiNormal, &temp.Pos, &temp.Tangent );
+			temp.BiNormal = D3DXVECTOR3( bin->GetDirectArray().GetAt(i)[0],
+										 bin->GetDirectArray().GetAt(i)[1],
+										 bin->GetDirectArray().GetAt(i)[2] );
 			// Add to the Vector
 			Vertices->push_back( temp );
 		}
