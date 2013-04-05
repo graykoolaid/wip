@@ -126,26 +126,34 @@ void ProcessMesh( FbxNode* node )
 		for( int j = 0; j < 3; ++j )
 		{
 			int vertexIndex = mesh->GetPolygonVertex( i, j );
-
+			
 			if( vertexIndex < 0 || vertexIndex >= vertexCount )
 				continue;
 
 			// Get vertices
 			FbxVector4 position = controlPoints[vertexIndex];
-
+			
 			// Get normal
 			FbxVector4 normal;
 			mesh->GetPolygonVertexNormal( i, j, normal );
 
 			// Get TexCoords
 			FbxVector2 texcoord = GetTexCoords( mesh, 0, i, j, vertexIndex );
+
+			// Get Binormals WIP USE AT OWN RISK
+			FbxGeometryElementBinormal* bin = mesh->GetElementBinormal(j);
 			
+
 			Vertex temp;
 			temp.Pos = D3DXVECTOR3( position[0], position[1], position[2] );
 			temp.Normal   = D3DXVECTOR3( normal[0], normal[1], normal[2] );
 			temp.Tex = D3DXVECTOR2( texcoord[0], 1.0 - texcoord[1] );
 			temp.texNum = tmpArray->GetAt(i) + TexCount;
-
+			temp.Tangent = temp.Pos;
+			
+			//temp.Tangent = D3DXVECTOR3( -temp.Normal.x, 0, temp.Normal.z );
+			temp.BiNormal;
+			D3DXVec3Cross( &temp.BiNormal, &temp.Pos, &temp.Tangent );
 			// Add to the Vector
 			Vertices->push_back( temp );
 		}

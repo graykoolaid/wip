@@ -15,6 +15,8 @@ struct Vertex
 	D3DXVECTOR3 Normal;
 	D3DXVECTOR2 Tex;
 	int 		texNum;
+	D3DXVECTOR3 Tangent;
+	D3DXVECTOR3 BiNormal;
 };
 
 int Import( char* filename, vector<Vertex>* vert );

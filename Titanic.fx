@@ -58,6 +58,8 @@ struct VS_INPUT
 	float4 Normal	: NORMAL;
 	float2 Tex		: TEXCOORD;
 	int TexNum	    : TEXNUM;
+	float4 Tangent	: TANGENT;
+	float4 BiNormal	: BINORMAL;
 };
 
 struct PS_INPUT
@@ -66,6 +68,8 @@ struct PS_INPUT
 	float4 Normal	: NORMAL;
 	float2 Tex		: TEXCOORD0;
 	int TexNum      : TEXNUM;
+	float4 Tangent	: TANGENT;
+	float4 BiNormal	: BINORMAL;
 };
 
 
@@ -74,9 +78,6 @@ struct PS_INPUT
 //--------------------------------------------------------------------------------------
 PS_INPUT VS( VS_INPUT input )
 {
-
-	
-
 	PS_INPUT output = (PS_INPUT)0;
 	   
     output.Pos = mul( input.Pos, World );
@@ -85,6 +86,8 @@ PS_INPUT VS( VS_INPUT input )
     output.Normal = mul( input.Normal, World );
     output.Tex    = input.Tex;
 	output.TexNum = input.TexNum;
+	output.Tangent = mul( input.Tangent, World );
+	output.BiNormal = mul( input.BiNormal, World );
 
     return output;
 }
@@ -99,13 +102,34 @@ float4 PS( PS_INPUT input) : SV_Target
 
 		float4 textureFinal = float4( 1.0,1.0,1.0,1.0 );
         
-        //do NdotL lighting for 2 lights
+		float3 normMap;
+		//for( int i = 0; i < 10; i++ )
+		//{
+		//	if( i == input.TexNum )
+		//	{
+		//		normMap = NormalTextures[i].Sample( samLinear, input.Tex ).xyz;
+		//		normMap = ( normMap - .5f ) * 2.0f;
+		//		break;
+		//	}
+		//	//normMap = input.Normal;
+		//}
+				normMap = NormalTextures[0].Sample( samLinear, input.Tex ).xyz;
+				normMap = ( normMap - .5f ) * 2.0f;
+		float3 N = normalize( input.Normal );
+		float3 T = normalize( input.Tangent - dot( input.Tangent, N )*N );
+		float3 B = cross( N, T );
+		float3x3 TBN = float3x3( T, B, N );
+
+		//normMap = mul( normMap, TBN );
+		normMap = input.Normal + ( normMap.x * input.Tangent + normMap.y * input.BiNormal );
+
+		float3 light;
         for(int i=0; i<4; i++)
         {
-            LightColor += saturate( dot( (float3)vLightDir[i],input.Normal) * vLightColor[i]);
+            //LightColor += saturate( dot( (float3)vLightDir[i],input.Normal) * vLightColor[i]);
+            LightColor += saturate( dot( (float3)vLightDir[i],normMap) * vLightColor[i]);
         }
 
-		LightColor.a = 1.0;
 
 		if( texSelect == input.TexNum)
 			return float4( 0.0, 1.0, 0.0, 0.0 );
@@ -121,8 +145,8 @@ float4 PS( PS_INPUT input) : SV_Target
 		{
 			if( i == input.TexNum )
 			{
-				//textureFinal = DiffuseTextures[i].Sample( samLinear, input.Tex )*LightColor;
-				textureFinal = NormalTextures[i].Sample( samLinear, input.Tex )*LightColor;
+				textureFinal = DiffuseTextures[i].Sample( samLinear, input.Tex )*LightColor;
+				//textureFinal = NormalTextures[i].Sample( samLinear, input.Tex )*LightColor;
 			}
 		}
 

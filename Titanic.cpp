@@ -529,6 +529,8 @@ HRESULT InitDevice()
 		{ "NORMAL",	  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D10_INPUT_PER_VERTEX_DATA, 0 },
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, 24, D3D10_INPUT_PER_VERTEX_DATA, 0 }, 
 		{ "TEXNUM",   0, DXGI_FORMAT_R32_FLOAT,		  0, 32, D3D10_INPUT_PER_VERTEX_DATA, 0 },
+		{ "TANGENT",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D10_INPUT_PER_VERTEX_DATA, 0 },
+		{ "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 56, D3D10_INPUT_PER_VERTEX_DATA, 0 },
 	};
 	UINT numElements = sizeof( layout ) / sizeof( layout[0] );
 
@@ -769,23 +771,16 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 	return 0;
 }
 
-
+float t = 0.0;
 //--------------------------------------------------------------------------------------
 // Render a frame
 //--------------------------------------------------------------------------------------
 void DrawScene()
 {
-	// Update our time
-	static float t = 0.0f;
-	static DWORD dwTimeStart = 0;
-	DWORD dwTimeCur = GetTickCount();
-	if( dwTimeStart == 0 )
-		dwTimeStart = dwTimeCur;
-	t = ( dwTimeCur - dwTimeStart ) / 1000.0f;
-
 	// 1st Cube: Rotate around the origin
-	D3DXMatrixRotationY( &g_World1, t/2.0 );
-
+	t += 3.14159/200000;
+	D3DXMatrixRotationY( &g_World1, t );
+	
 	// Clear the back buffer
 	g_pd3dDevice->ClearRenderTargetView( g_pRenderTargetView, COLOR );
 
