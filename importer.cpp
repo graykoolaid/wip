@@ -151,18 +151,18 @@ void ProcessMesh( FbxNode* node )
 			temp.Normal   = D3DXVECTOR3( normal[0], normal[1], normal[2] );
 			temp.Tex = D3DXVECTOR2( texcoord[0], 1.0 - texcoord[1] );
 			temp.texNum = tmpArray->GetAt(i) + TexCount;
-			//temp.Tangent = temp.Pos;
+			temp.Tangent = temp.Pos;
 
-			//temp.Tangent;
-			//D3DXVec3Cross( &temp.Tangent, &temp.Normal, &temp.Pos );
+			temp.BiNormal;
+			D3DXVec3Cross( &temp.BiNormal, &temp.Normal, &temp.Pos );
 
-			temp.Tangent = D3DXVECTOR3( tan->GetDirectArray().GetAt(i)[0],
-										tan->GetDirectArray().GetAt(i)[1],
-										tan->GetDirectArray().GetAt(i)[2] );
-			
-			temp.BiNormal = D3DXVECTOR3( bin->GetDirectArray().GetAt(i)[0],
-										 bin->GetDirectArray().GetAt(i)[1],
-										 bin->GetDirectArray().GetAt(i)[2] );
+			//temp.Tangent = D3DXVECTOR3( tan->GetDirectArray().GetAt(i)[0],
+			//							tan->GetDirectArray().GetAt(i)[1],
+			//							tan->GetDirectArray().GetAt(i)[2] );
+			//
+			//temp.BiNormal = D3DXVECTOR3( bin->GetDirectArray().GetAt(i)[0],
+			//							 bin->GetDirectArray().GetAt(i)[1],
+			//							 bin->GetDirectArray().GetAt(i)[2] );
 
 			
 
