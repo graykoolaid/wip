@@ -89,6 +89,8 @@ PS_INPUT VS( VS_INPUT input )
 	output.Tangent = mul( input.Tangent, World );
 	output.BiNormal = mul( input.BiNormal, World );
 
+
+
     return output;
 }
 
@@ -103,30 +105,29 @@ float4 PS( PS_INPUT input) : SV_Target
 		float4 textureFinal = float4( 1.0,1.0,1.0,1.0 );
         
 		float3 normMap;
-		//for( int i = 0; i < 10; i++ )
-		//{
-		//	if( i == input.TexNum )
-		//	{
-		//		normMap = NormalTextures[i].Sample( samLinear, input.Tex ).xyz;
-		//		normMap = ( normMap - .5f ) * 2.0f;
-		//		break;
-		//	}
-		//	//normMap = input.Normal;
-		//}
-				normMap = NormalTextures[0].Sample( samLinear, input.Tex ).xyz;
-				normMap = ( normMap - .5f ) * 2.0f;
-		float3 N = normalize( input.Normal );
-		float3 T = normalize( input.Tangent - dot( input.Tangent, N )*N );
-		float3 B = cross( N, T );
+		for( int i = 0; i < 10; i++ )
+		{
+			if( i == input.TexNum )
+			{
+				normMap = NormalTextures[i].Sample( samLinear, input.Tex ).xyz;
+				normMap = ( normMap ) * 2.0f - 1.0f;
+				break;
+			}
+			//normMap = input.Normal;
+		}
+
+		float3 N = input.Normal;
+		float3 T = input.Tangent;
+		float3 B = input.BiNormal;
+
 		float3x3 TBN = float3x3( T, B, N );
 
-		//normMap = mul( normMap, TBN );
-		normMap = input.Normal + ( normMap.x * input.Tangent + normMap.y * input.BiNormal );
+		normMap = mul( normMap, TBN );
+		normMap = normalize(normMap) ;
 
 		float3 light;
-        for(int i=0; i<4; i++)
+        for(int i=0; i<3; i++)
         {
-            //LightColor += saturate( dot( (float3)vLightDir[i],input.Normal) * vLightColor[i]);
             LightColor += saturate( dot( (float3)vLightDir[i],normMap) * vLightColor[i]);
         }
 
@@ -159,24 +160,46 @@ float4 PS( PS_INPUT input) : SV_Target
 
 }
 
-//------------------------------------------------------
-// Render ShadowMap
-//-----------------------------------------------------
-PS_INPUT ShadowMapVS( VS_INPUT input )
+
+float4 normPS( PS_INPUT input) : SV_Target
 {
-	PS_INPUT output = (PS_INPUT)0;
-	   
-    output.Pos = mul( input.Pos, mul( World, lightViewProj ) );
-    output.Normal = mul( input.Normal, World );
-    output.Tex    = input.Tex;
-	output.TexNum = input.TexNum;
+        float4 LightColor = 0;
 
-    return output;
+		float4 textureFinal = float4( 1.0,1.0,1.0,1.0 );
+
+		float3 light;
+        for(int i=0; i<3; i++)
+        {
+            LightColor += saturate( dot( (float3)vLightDir[i],input.Normal) * vLightColor[i]);
+        }
+
+
+		if( texSelect == input.TexNum)
+			return float4( 0.0, 1.0, 0.0, 0.0 );
+
+
+		if( texSelect == -2 )
+			textureFinal = float4( 0.0, (1.0 -( (float)input.TexNum * .10)), 0.0, 1.0 );
+
+			int texnum = input.TexNum;
+		
+		//quick hack to make to expand it to large values. change 10 if more than 10 tex on an object
+		for( int i = 0; i < 10; i++ )
+		{
+			if( i == input.TexNum )
+			{
+				textureFinal = DiffuseTextures[i].Sample( samLinear, input.Tex )*LightColor;
+			}
+		}
+
+		if( isAlpha )
+			clip( textureFinal.a - .9f );
+
+		//if this is white you got issues
+		return textureFinal;
+		return float4( 1.0, 1.0, 1.0, 1.0 );
+
 }
-
-void ShadowMapPS( )
-{}
-
 
 //--------------------------------------------------------------------------------------
 technique10 Render
@@ -190,12 +213,12 @@ technique10 Render
 }
 
 //--------------------------------------------------------------------------------------
-technique10 RenderShadowMap
+technique10 RenderNormalMap
 {
     pass P0
     {
-        SetVertexShader( CompileShader( vs_4_0, ShadowMapVS() ) );
+        SetVertexShader( CompileShader( vs_4_0, VS() ) );
         SetGeometryShader( NULL );
-        SetPixelShader( CompileShader( ps_4_0, ShadowMapPS() ) );
+        SetPixelShader( CompileShader( ps_4_0, normPS() ) );
     }
 }

@@ -27,6 +27,7 @@ int TexCount = 0;
 
 int meshMatMax = 0;
 
+
 // We just use the main function to get the party started. From here we will call everything in a straight line hopefully
 int Import( char* filename, vector<Vertex>* vert )
 {
@@ -150,7 +151,11 @@ void ProcessMesh( FbxNode* node )
 			temp.Normal   = D3DXVECTOR3( normal[0], normal[1], normal[2] );
 			temp.Tex = D3DXVECTOR2( texcoord[0], 1.0 - texcoord[1] );
 			temp.texNum = tmpArray->GetAt(i) + TexCount;
-	//		temp.Tangent = temp.Pos;
+			//temp.Tangent = temp.Pos;
+
+			//temp.Tangent;
+			//D3DXVec3Cross( &temp.Tangent, &temp.Normal, &temp.Pos );
+
 			temp.Tangent = D3DXVECTOR3( tan->GetDirectArray().GetAt(i)[0],
 										tan->GetDirectArray().GetAt(i)[1],
 										tan->GetDirectArray().GetAt(i)[2] );
@@ -158,10 +163,47 @@ void ProcessMesh( FbxNode* node )
 			temp.BiNormal = D3DXVECTOR3( bin->GetDirectArray().GetAt(i)[0],
 										 bin->GetDirectArray().GetAt(i)[1],
 										 bin->GetDirectArray().GetAt(i)[2] );
+
+			
+
 			// Add to the Vector
 			Vertices->push_back( temp );
 		}
+		if( Vertices->size() % 3 == 0 && Vertices->size() > 0  )
+		//	if( Vertices->size() > 3 )
+			{
+				int i0 = Vertices->size() - 3;
+				int i1 = Vertices->size() - 2;
+				int i2 = Vertices->size() - 1;
 
+				D3DXVECTOR3 Q1 = Vertices[0][i1].Pos - Vertices[0][i0].Pos;
+				D3DXVECTOR3 Q2 = Vertices[0][i2].Pos - Vertices[0][i0].Pos;
+
+				D3DXVECTOR2 u0 = Vertices[0][i0].Tex;
+				D3DXVECTOR2 u1 = Vertices[0][i1].Tex;
+				D3DXVECTOR2 u2 = Vertices[0][i2].Tex;
+
+				D3DXVECTOR2 s1 = u1 - u0;
+				D3DXVECTOR2 s2 = u2 - u0;
+
+				D3DXVECTOR3 T = Q1*s2.y  + Q2*-s1.y;
+				D3DXVECTOR3 B = Q1*-s2.x + Q2*s1.x;
+
+				float val = 1 / ( s1.x*s2.y - s2.x*s1.y ) / 2.;
+
+				T = T * val;
+				B = B * val;
+				Vertices[0][i0].Tangent = T;
+				Vertices[0][i1].Tangent = T;
+				Vertices[0][i2].Tangent = T;
+				Vertices[0][i0].BiNormal = B;
+				Vertices[0][i1].BiNormal = B;
+				Vertices[0][i2].BiNormal = B;
+				
+			//	temp.Tangent = T;
+			//	temp.BiNormal = B;
+								
+			}
 	}
 	TexCount += meshMatMax+1;
 }
