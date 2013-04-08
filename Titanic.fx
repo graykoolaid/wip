@@ -1,3 +1,6 @@
+
+
+
 //--------------------------------------------------------------------------------------
 // File: Tutorial0510.fx
 //
@@ -20,27 +23,18 @@ int isAlpha;
 //--------------------------------------------------------------------------------------
 // Constant Buffer Variables
 //--------------------------------------------------------------------------------------
-cbuffer cbNeverChanges
+cbuffer ConstantBuffer : register( b0 )
 {
 	matrix View;
-};
-    
-cbuffer cbChangeOnResize
-{
     matrix Projection;
-};
-    
-cbuffer cbChangesEveryFrame
-{
     matrix World;
+
+}
 	float4 vLightDir[10];
 	float4 vLightColor[10];
 	float4 vOutputColor;
 	int		texSelectIndex;
 	float4x4 lightViewProj;
-};
-
-
 
 
 SamplerState samLinear
@@ -100,6 +94,7 @@ PS_INPUT VS( VS_INPUT input )
 //--------------------------------------------------------------------------------------
 float4 PS( PS_INPUT input) : SV_Target
 {
+		return float4(1.0, 1.0, 1.0, 1.0);
         float4 LightColor = 0;
 
 		float4 textureFinal = float4( 1.0,1.0,1.0,1.0 );
@@ -132,8 +127,8 @@ float4 PS( PS_INPUT input) : SV_Target
         }
 
 
-		if( texSelect == input.TexNum)
-			return float4( 0.0, 1.0, 0.0, 0.0 );
+	//	if( texSelect == input.TexNum)
+	//		return float4( 0.0, 1.0, 0.0, 0.0 );
 
 
 		if( texSelect == -2 )
@@ -202,23 +197,23 @@ float4 normPS( PS_INPUT input) : SV_Target
 }
 
 //--------------------------------------------------------------------------------------
-technique10 Render
-{
-    pass P0
-    {
-        SetVertexShader( CompileShader( vs_4_0, VS() ) );
-        SetGeometryShader( NULL );
-        SetPixelShader( CompileShader( ps_4_0, PS() ) );
-    }
-}
-
-//--------------------------------------------------------------------------------------
-technique10 RenderNormalMap
-{
-    pass P0
-    {
-        SetVertexShader( CompileShader( vs_4_0, VS() ) );
-        SetGeometryShader( NULL );
-        SetPixelShader( CompileShader( ps_4_0, normPS() ) );
-    }
-}
+//technique10 Render
+//{
+//    pass P0
+//    {
+//        SetVertexShader( CompileShader( vs_4_0, VS() ) );
+//        SetGeometryShader( NULL );
+//        SetPixelShader( CompileShader( ps_4_0, PS() ) );
+//    }
+//}
+//
+////--------------------------------------------------------------------------------------
+//technique10 RenderNormalMap
+//{
+//    pass P0
+//    {
+//        SetVertexShader( CompileShader( vs_4_0, VS() ) );
+//        SetGeometryShader( NULL );
+//        SetPixelShader( CompileShader( ps_4_0, normPS() ) );
+//    }
+//}

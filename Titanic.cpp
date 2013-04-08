@@ -6,13 +6,15 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 //--------------------------------------------------------------------------------------
 #include <windows.h>
-#include <d3d10.h>
-#include <d3dx10.h>
+#include <D3D11.h>
+#include <d3dx11.h>
 #include <xnamath.h>
 #include <vector>
 #include "resource.h"
 #include "importer.h"
 #include "fbxImporter.cpp"
+#include <d3dx11effect.h>
+
 
 using namespace std;
 
@@ -28,14 +30,21 @@ struct Camera
 	D3DXVECTOR3 up;
 }Cam;
 
+struct ConstantBuffer
+{
+	D3DXMATRIX mView;
+	D3DXMATRIX mProjection;
+	D3DXMATRIX mWorld;
+};
+
 struct Object
 {
 	int numMeshes;
 	int alpha;
 	vector<Vertex>		vertices;
-	ID3D10Buffer*		vertexBuffer;
-	vector<ID3D10ShaderResourceView*> texArray;
-	vector<ID3D10ShaderResourceView*> NormArray;
+	ID3D11Buffer*		vertexBuffer;
+	vector<ID3D11ShaderResourceView*> texArray;
+	vector<ID3D11ShaderResourceView*> NormArray;
 };
 // Setup our lighting parameters
 vector<D3DXVECTOR4> vLightDirs;
@@ -70,43 +79,48 @@ D3DXVECTOR4 COLOR = D3DXVECTOR4( .5, .5, .5, 1.0 );
 //--------------------------------------------------------------------------------------
 HINSTANCE                   g_hInst = NULL;
 HWND                        g_hWnd = NULL;
-D3D10_DRIVER_TYPE           g_driverType = D3D10_DRIVER_TYPE_NULL;
-D3D10_RASTERIZER_DESC		raster;
-ID3D10RasterizerState*		pState;
-ID3D10Device*               g_pd3dDevice = NULL;
+D3D_DRIVER_TYPE             g_driverType = D3D_DRIVER_TYPE_NULL;
+D3D_FEATURE_LEVEL			g_featureLevel = D3D_FEATURE_LEVEL_11_0;
+D3D11_RASTERIZER_DESC		raster;
+ID3D11RasterizerState*		pState;
+ID3D11Device*               g_pd3dDevice = NULL;
+ID3D11DeviceContext*		g_pd3dDeviceCon = NULL;
 IDXGISwapChain*             g_pSwapChain = NULL;
-ID3D10RenderTargetView*     g_pRenderTargetView = NULL;
-ID3D10Texture2D*            g_pDepthStencil = NULL;
-ID3D10DepthStencilView*     g_pDepthStencilView = NULL;
-ID3D10Effect*               g_pEffect = NULL;
-ID3D10EffectTechnique*      g_pTechnique = NULL;
-ID3D10EffectTechnique*      g_pShadowMapTechnique = NULL;
-ID3D10InputLayout*          g_pVertexLayout = NULL;
-ID3D10Buffer*               g_pVertexBuffer = NULL;
-ID3D10Buffer*               g_pIndexBuffer = NULL;
+ID3D11RenderTargetView*     g_pRenderTargetView = NULL;
+ID3D11Texture2D*            g_pDepthStencil = NULL;
+ID3D11DepthStencilView*     g_pDepthStencilView = NULL;
+ID3DX11Effect*               g_pEffect = NULL;
+ID3DX11EffectTechnique*      g_pTechnique = NULL;
+ID3D11InputLayout*          g_pVertexLayout = NULL;
+ID3D11Buffer*               g_pVertexBuffer = NULL;
+ID3D11Buffer*               g_pIndexBuffer = NULL;
 
-ID3D10ShaderResourceView*   g_pTextureRV = NULL;
-ID3D10ShaderResourceView*   g_pTexture2RV = NULL;
-ID3D10ShaderResourceView**  g_pTexArray = NULL;
-ID3D10ShaderResourceView**  g_pNormArray = NULL;
+ID3D11VertexShader*			g_pVertexShader = NULL;	
+ID3D11PixelShader*			g_pPixelShader = NULL;		
 
-ID3D10EffectMatrixVariable* g_pWorldVariable = NULL;
-ID3D10EffectMatrixVariable* g_pViewVariable = NULL;
-ID3D10EffectMatrixVariable* g_pProjectionVariable = NULL;
+ID3D11ShaderResourceView*   g_pTextureRV = NULL;
+ID3D11ShaderResourceView*   g_pTexture2RV = NULL;
+ID3D11ShaderResourceView**  g_pTexArray = NULL;
+ID3D11ShaderResourceView**  g_pNormArray = NULL;
 
-ID3D10EffectScalarVariable* g_ptextureSelectVariable = NULL;
-ID3D10EffectScalarVariable* g_ptextureAlphaVariable = NULL;
+//ID3DX11EffectMatrixVariable* g_pWorldVariable = NULL;
+//ID3DX11EffectMatrixVariable* g_pViewVariable = NULL;
+//ID3DX11EffectMatrixVariable* g_pProjectionVariable = NULL;
+//
+//ID3DX11EffectScalarVariable* g_ptextureSelectVariable = NULL;
+//ID3DX11EffectScalarVariable* g_ptextureAlphaVariable = NULL;
+//
+//ID3DX11EffectVectorVariable* g_pLightDirVariable = NULL;
+//ID3DX11EffectVectorVariable* g_pLightColorVariable = NULL;
+//ID3DX11EffectVectorVariable* g_pOutputColorVariable = NULL;
+//
+//
+//ID3DX11EffectShaderResourceVariable* g_pDiffuseVariable = NULL;
+//ID3DX11EffectShaderResourceVariable* g_pDiffuseVariable2 = NULL;
+//ID3DX11EffectShaderResourceVariable* g_ptextureArrayPtr = NULL;
+//ID3DX11EffectShaderResourceVariable* g_pNormalArrayPtr = NULL;
 
-ID3D10EffectVectorVariable* g_pLightDirVariable = NULL;
-ID3D10EffectVectorVariable* g_pLightColorVariable = NULL;
-ID3D10EffectVectorVariable* g_pOutputColorVariable = NULL;
-
-
-ID3D10EffectShaderResourceVariable* g_pDiffuseVariable = NULL;
-ID3D10EffectShaderResourceVariable* g_pDiffuseVariable2 = NULL;
-ID3D10EffectShaderResourceVariable* g_ptextureArrayPtr = NULL;
-ID3D10EffectShaderResourceVariable* g_pNormalArrayPtr = NULL;
-
+ID3D11Buffer*           g_pConstantBuffer = NULL;
 
 D3DXMATRIX                  g_World1;
 D3DXMATRIX                  g_View;
@@ -247,15 +261,15 @@ void createPlane()
 	terrain.texArray.push_back( NULL );
 
 	// Load the Vertex Buffer
-	D3D10_BUFFER_DESC bd;
+	D3D11_BUFFER_DESC bd;
 
-	ZeroMemory(&bd, sizeof(D3D10_BUFFER_DESC));
-	bd.Usage = D3D10_USAGE_DEFAULT;
+	ZeroMemory(&bd, sizeof(D3D11_BUFFER_DESC));
+	bd.Usage = D3D11_USAGE_DEFAULT;
 	bd.ByteWidth = sizeof( Vertex ) * terrain.vertices.size();
-	bd.BindFlags = D3D10_BIND_VERTEX_BUFFER;
+	bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bd.CPUAccessFlags = 0;
 	bd.MiscFlags = 0;
-	D3D10_SUBRESOURCE_DATA InitData;
+	D3D11_SUBRESOURCE_DATA InitData;
 	InitData.pSysMem = &terrain.vertices[0];
 	hr = g_pd3dDevice->CreateBuffer( &bd, &InitData, &g_pVertexBuffer );
 	if( FAILED( hr ) )
@@ -294,15 +308,15 @@ void charLoad( char* filename, vector<const wchar_t *> *textures, vector<const w
 //	tempO.vertices  = tempO;
 
 	// Load the Vertex Buffer
-	D3D10_BUFFER_DESC bd;
+	D3D11_BUFFER_DESC bd;
 
-	ZeroMemory(&bd, sizeof(D3D10_BUFFER_DESC));
-	bd.Usage = D3D10_USAGE_DEFAULT;
+	ZeroMemory(&bd, sizeof(D3D11_BUFFER_DESC));
+	bd.Usage = D3D11_USAGE_DEFAULT;
 	bd.ByteWidth = sizeof( Vertex ) * characters[characterIndex].vertices.size();
-	bd.BindFlags = D3D10_BIND_VERTEX_BUFFER;
+	bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bd.CPUAccessFlags = 0;
 	bd.MiscFlags = 0;
-	D3D10_SUBRESOURCE_DATA InitData;
+	D3D11_SUBRESOURCE_DATA InitData;
 	InitData.pSysMem = &characters[characterIndex].vertices[0];
 	hr = g_pd3dDevice->CreateBuffer( &bd, &InitData, &g_pVertexBuffer );
 	if( FAILED( hr ) )
@@ -312,9 +326,9 @@ void charLoad( char* filename, vector<const wchar_t *> *textures, vector<const w
 	characters[characterIndex].vertexBuffer = g_pVertexBuffer;
 
 	//// Load the Indice Buffer
-	//bd.Usage = D3D10_USAGE_DEFAULT;
+	//bd.Usage = D3D11_USAGE_DEFAULT;
 	//bd.ByteWidth = sizeof( int ) * indices_vec.size();
-	//bd.BindFlags = D3D10_BIND_INDEX_BUFFER;
+	//bd.BindFlags = D3D11_BIND_INDEX_BUFFER;
 	//bd.CPUAccessFlags = 0;
 	//bd.MiscFlags = 0;
 	//InitData.pSysMem = &indices_vec[0];
@@ -327,9 +341,9 @@ void charLoad( char* filename, vector<const wchar_t *> *textures, vector<const w
 
 	for( int i = 0; i < textures->size(); i++ )
 	{
-		hr = D3DX10CreateShaderResourceViewFromFile( g_pd3dDevice, textures[0][i], NULL, NULL, &g_pTextureRV, NULL );
+		hr = D3DX11CreateShaderResourceViewFromFile( g_pd3dDevice, textures[0][i], NULL, NULL, &g_pTextureRV, NULL );
 		characters[characterIndex].texArray.push_back( g_pTextureRV );
-		hr = D3DX10CreateShaderResourceViewFromFile( g_pd3dDevice, NormTextures[0][i], NULL, NULL, &g_pTextureRV, NULL );
+		hr = D3DX11CreateShaderResourceViewFromFile( g_pd3dDevice, NormTextures[0][i], NULL, NULL, &g_pTextureRV, NULL );
 		characters[characterIndex].NormArray.push_back( g_pTextureRV );
 	}
 	
@@ -379,6 +393,38 @@ HRESULT InitWindow( HINSTANCE hInstance, int nCmdShow )
 
 
 //--------------------------------------------------------------------------------------
+// Helper for compiling shaders with D3DX11
+//--------------------------------------------------------------------------------------
+HRESULT CompileShaderFromFile( WCHAR* szFileName, LPCSTR szEntryPoint, LPCSTR szShaderModel, ID3DBlob** ppBlobOut )
+{
+    HRESULT hr = S_OK;
+
+    DWORD dwShaderFlags = D3DCOMPILE_ENABLE_STRICTNESS;
+#if defined( DEBUG ) || defined( _DEBUG )
+    // Set the D3DCOMPILE_DEBUG flag to embed debug information in the shaders.
+    // Setting this flag improves the shader debugging experience, but still allows 
+    // the shaders to be optimized and to run exactly the way they will run in 
+    // the release configuration of this program.
+    dwShaderFlags |= D3DCOMPILE_DEBUG;
+#endif
+
+    ID3DBlob* pErrorBlob;
+    hr = D3DX11CompileFromFile( szFileName, NULL, NULL, szEntryPoint, szShaderModel, 
+        dwShaderFlags, 0, NULL, ppBlobOut, &pErrorBlob, NULL );
+    if( FAILED(hr) )
+    {
+        if( pErrorBlob != NULL )
+            OutputDebugStringA( (char*)pErrorBlob->GetBufferPointer() );
+        if( pErrorBlob ) pErrorBlob->Release();
+        return hr;
+    }
+    if( pErrorBlob ) pErrorBlob->Release();
+
+    return S_OK;
+}
+
+
+//--------------------------------------------------------------------------------------
 // Create Direct3D device and swap chain
 //--------------------------------------------------------------------------------------
 HRESULT InitDevice()
@@ -395,15 +441,23 @@ HRESULT InitDevice()
 
 	UINT createDeviceFlags = 0;
 #ifdef _DEBUG
-	createDeviceFlags |= D3D10_CREATE_DEVICE_DEBUG;
+	createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
-	D3D10_DRIVER_TYPE driverTypes[] =
+	D3D_DRIVER_TYPE driverTypes[] =
 	{
-		D3D10_DRIVER_TYPE_HARDWARE,
-		D3D10_DRIVER_TYPE_REFERENCE,
+		D3D_DRIVER_TYPE_HARDWARE,
+		D3D_DRIVER_TYPE_REFERENCE,
 	};
 	UINT numDriverTypes = sizeof( driverTypes ) / sizeof( driverTypes[0] );
+
+	D3D_FEATURE_LEVEL featureLevels[] =
+    {
+        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0,
+	};
+	UINT numFeatureLevels = ARRAYSIZE( featureLevels );
 
 	DXGI_SWAP_CHAIN_DESC sd;
 	ZeroMemory( &sd, sizeof( sd ) );
@@ -422,8 +476,10 @@ HRESULT InitDevice()
 	for( UINT driverTypeIndex = 0; driverTypeIndex < numDriverTypes; driverTypeIndex++ )
 	{
 		g_driverType = driverTypes[driverTypeIndex];
-		hr = D3D10CreateDeviceAndSwapChain( NULL, g_driverType, NULL, 0,
-			D3D10_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice );
+		//hr = D3D11CreateDeviceAndSwapChain( NULL, g_driverType, NULL, 0,
+		//	D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice );
+		hr = D3D11CreateDeviceAndSwapChain( NULL, g_driverType, NULL, createDeviceFlags, featureLevels, numFeatureLevels,
+                                            D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &g_featureLevel, &g_pd3dDeviceCon );
 		if( SUCCEEDED( hr ) )
 			break;
 	}
@@ -431,8 +487,8 @@ HRESULT InitDevice()
 		return hr;
 
 	// Create a render target view
-	ID3D10Texture2D* pBuffer;
-	hr = g_pSwapChain->GetBuffer( 0, __uuidof( ID3D10Texture2D ), ( LPVOID* )&pBuffer );
+	ID3D11Texture2D* pBuffer;
+	hr = g_pSwapChain->GetBuffer( 0, __uuidof( ID3D11Texture2D ), ( LPVOID* )&pBuffer );
 	if( FAILED( hr ) )
 		return hr;
 
@@ -442,7 +498,7 @@ HRESULT InitDevice()
 		return hr;
 
 	// Create depth stencil texture
-	D3D10_TEXTURE2D_DESC descDepth;
+	D3D11_TEXTURE2D_DESC descDepth;
 	descDepth.Width = width;
 	descDepth.Height = height;
 	descDepth.MipLevels = 1;
@@ -450,8 +506,8 @@ HRESULT InitDevice()
 	descDepth.Format = DXGI_FORMAT_D32_FLOAT;
 	descDepth.SampleDesc.Count = 1;
 	descDepth.SampleDesc.Quality = 0;
-	descDepth.Usage = D3D10_USAGE_DEFAULT;
-	descDepth.BindFlags = D3D10_BIND_DEPTH_STENCIL;
+	descDepth.Usage = D3D11_USAGE_DEFAULT;
+	descDepth.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 	descDepth.CPUAccessFlags = 0;
 	descDepth.MiscFlags = 0;
 	hr = g_pd3dDevice->CreateTexture2D( &descDepth, NULL, &g_pDepthStencil );
@@ -459,91 +515,122 @@ HRESULT InitDevice()
 		return hr;
 
 	// Create the depth stencil view
-	D3D10_DEPTH_STENCIL_VIEW_DESC descDSV;
-	descDSV.Format = descDepth.Format;
-	descDSV.ViewDimension = D3D10_DSV_DIMENSION_TEXTURE2D;
-	descDSV.Texture2D.MipSlice = 0;
-	hr = g_pd3dDevice->CreateDepthStencilView( g_pDepthStencil, &descDSV, &g_pDepthStencilView );
-	if( FAILED( hr ) )
-		return hr;
+    D3D11_DEPTH_STENCIL_VIEW_DESC descDSV;
+	ZeroMemory( &descDSV, sizeof(descDSV) );
+    descDSV.Format = descDepth.Format;
+    descDSV.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+    descDSV.Texture2D.MipSlice = 0;
+    hr = g_pd3dDevice->CreateDepthStencilView( g_pDepthStencil, &descDSV, &g_pDepthStencilView );
+    if( FAILED( hr ) )
+        return hr;
 
-	g_pd3dDevice->OMSetRenderTargets( 1, &g_pRenderTargetView, g_pDepthStencilView );
+	g_pd3dDeviceCon->OMSetRenderTargets( 1, &g_pRenderTargetView, g_pDepthStencilView );
 
 
 	// Setup the viewport
-	D3D10_VIEWPORT vp;
+	D3D11_VIEWPORT vp;
 	vp.Width = width;
 	vp.Height = height;
 	vp.MinDepth = 0.0f;
 	vp.MaxDepth = 1.0f;
 	vp.TopLeftX = 0;
 	vp.TopLeftY = 0;
-	g_pd3dDevice->RSSetViewports( 1, &vp );
+	g_pd3dDeviceCon->RSSetViewports( 1, &vp );
 
 	// Create the effect
-	DWORD dwShaderFlags = D3D10_SHADER_ENABLE_STRICTNESS;
+	DWORD dwShaderFlags = D3DCOMPILE_ENABLE_STRICTNESS;
 #if defined( DEBUG ) || defined( _DEBUG )
-	// Set the D3D10_SHADER_DEBUG flag to embed debug information in the shaders.
+	// Set the D3D11_SHADER_DEBUG flag to embed debug information in the shaders.
 	// Setting this flag improves the shader debugging experience, but still allows 
 	// the shaders to be optimized and to run exactly the way they will run in 
 	// the release configuration of this program.
-	dwShaderFlags |= D3D10_SHADER_DEBUG;
+	    dwShaderFlags |= D3DCOMPILE_DEBUG;
 #endif
-	hr = D3DX10CreateEffectFromFile( L"Titanic.fx", NULL, NULL, "fx_4_0", dwShaderFlags, 0, g_pd3dDevice, NULL,
-		NULL, &g_pEffect, NULL, NULL );
+	//hr = D3DX11CreateEffectFromFile( L"Titanic.fx", NULL, NULL, "fx_4_0", dwShaderFlags, 0, g_pd3dDeviceCon, NULL,
+	//	NULL, &g_pEffect, NULL, NULL );
+	
+	// Compile the vertex shader
+	ID3DBlob* pVSBlob = NULL;
+    hr = CompileShaderFromFile( L"Titanic.fx", "VS", "vs_4_0", &pVSBlob );
+    if( FAILED( hr ) )
+    {
+        MessageBox( NULL,
+                    L"The FX file cannot be compiled.  Please run this executable from the directory that contains the FX file.", L"Error", MB_OK );
+        return hr;
+    }
+	hr = g_pd3dDevice->CreateVertexShader( pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), NULL, &g_pVertexShader );
 	if( FAILED( hr ) )
-	{
-		MessageBox( NULL,
-			L"The FX file cannot be located.  Please run this executable from the directory that contains the FX file.", L"Error", MB_OK );
-		return hr;
-	}
+        return hr;
+
+	// Compile the pixel shader
+	ID3DBlob* pPSBlob = NULL;
+    hr = CompileShaderFromFile( L"Titanic.fx", "PS", "ps_4_0", &pPSBlob );
+    if( FAILED( hr ) )
+    {
+        MessageBox( NULL,
+                    L"The FX file cannot be compiled.  Please run this executable from the directory that contains the FX file.", L"Error", MB_OK );
+        return hr;
+    }
+	// Create the pixel shader
+	hr = g_pd3dDevice->CreatePixelShader( pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), NULL, &g_pPixelShader );
+	pPSBlob->Release();
+    if( FAILED( hr ) )
+        return hr;
+
+	// Create the constant buffer
+	D3D11_BUFFER_DESC bd;
+	ZeroMemory( &bd, sizeof(bd) );
+	bd.CPUAccessFlags = 0;
+	bd.Usage = D3D11_USAGE_DEFAULT;
+	bd.ByteWidth = sizeof(ConstantBuffer);
+	bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    hr = g_pd3dDevice->CreateBuffer( &bd, NULL, &g_pConstantBuffer );
+    if( FAILED( hr ) )
+        return hr;
+
 
 	// Obtain the technique
-	g_pTechnique = g_pEffect->GetTechniqueByName( "Render" );
-
-	// Shadow Map technique
-	g_pShadowMapTechnique = g_pEffect->GetTechniqueByName( "RenderShadowMap" );
+	//g_pTechnique = g_pEffect->GetTechniqueByName( "Render" );
 
 	// Obtain the variables
-	g_pWorldVariable			= g_pEffect->GetVariableByName( "World" )->AsMatrix();
-	g_pViewVariable				= g_pEffect->GetVariableByName( "View" )->AsMatrix();
-	g_pProjectionVariable		= g_pEffect->GetVariableByName( "Projection" )->AsMatrix();
+	//g_pWorldVariable			= g_pEffect->GetVariableByName( "World" )->AsMatrix();
+	//g_pViewVariable				= g_pEffect->GetVariableByName( "View" )->AsMatrix();
+	//g_pProjectionVariable		= g_pEffect->GetVariableByName( "Projection" )->AsMatrix();
 
-	g_pLightDirVariable			= g_pEffect->GetVariableByName( "vLightDir" )->AsVector();
-	g_pLightColorVariable		= g_pEffect->GetVariableByName( "vLightColor" )->AsVector();
-	g_pOutputColorVariable		= g_pEffect->GetVariableByName( "vOutputColor" )->AsVector();
+	//g_pLightDirVariable			= g_pEffect->GetVariableByName( "vLightDir" )->AsVector();
+	//g_pLightColorVariable		= g_pEffect->GetVariableByName( "vLightColor" )->AsVector();
+	//g_pOutputColorVariable		= g_pEffect->GetVariableByName( "vOutputColor" )->AsVector();
 
-	g_ptextureSelectVariable	= g_pEffect->GetVariableByName( "texSelect")->AsScalar();
-	g_ptextureAlphaVariable		= g_pEffect->GetVariableByName( "isAlpha" )->AsScalar();
-    
-	g_pDiffuseVariable			= g_pEffect->GetVariableByName( "txDiffuse0" )->AsShaderResource();
-    g_pDiffuseVariable2			= g_pEffect->GetVariableByName( "txDiffuse1" )->AsShaderResource();
-	g_ptextureArrayPtr			= g_pEffect->GetVariableByName( "DiffuseTextures")->AsShaderResource();
-	g_pNormalArrayPtr			= g_pEffect->GetVariableByName( "NormalTextures")->AsShaderResource();
+	//g_ptextureSelectVariable	= g_pEffect->GetVariableByName( "texSelect")->AsScalar();
+	//g_ptextureAlphaVariable		= g_pEffect->GetVariableByName( "isAlpha" )->AsScalar();
+ //   
+	//g_pDiffuseVariable			= g_pEffect->GetVariableByName( "txDiffuse0" )->AsShaderResource();
+ //   g_pDiffuseVariable2			= g_pEffect->GetVariableByName( "txDiffuse1" )->AsShaderResource();
+	//g_ptextureArrayPtr			= g_pEffect->GetVariableByName( "DiffuseTextures")->AsShaderResource();
+	//g_pNormalArrayPtr			= g_pEffect->GetVariableByName( "NormalTextures")->AsShaderResource();
 	
 
 	// Define the input layout
-	D3D10_INPUT_ELEMENT_DESC layout[] =
+	D3D11_INPUT_ELEMENT_DESC layout[] =
 	{
-		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,  0, D3D10_INPUT_PER_VERTEX_DATA, 0 },
-		{ "NORMAL",	  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D10_INPUT_PER_VERTEX_DATA, 0 },
-		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, 24, D3D10_INPUT_PER_VERTEX_DATA, 0 }, 
-		{ "TEXNUM",   0, DXGI_FORMAT_R32_FLOAT,		  0, 32, D3D10_INPUT_PER_VERTEX_DATA, 0 },
-		{ "TANGENT",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D10_INPUT_PER_VERTEX_DATA, 0 },
-		{ "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 56, D3D10_INPUT_PER_VERTEX_DATA, 0 },
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,  0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "NORMAL",	  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 }, 
+		{ "TEXNUM",   0, DXGI_FORMAT_R32_FLOAT,		  0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "TANGENT",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 56, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 	};
-	UINT numElements = sizeof( layout ) / sizeof( layout[0] );
+	//UINT numElements = sizeof( layout ) / sizeof( layout[0] );
+	UINT numElements = ARRAYSIZE( layout );
 
 	// Create the input layout
-	D3D10_PASS_DESC PassDesc;
-	g_pTechnique->GetPassByIndex( 0 )->GetDesc( &PassDesc );
-	hr = g_pd3dDevice->CreateInputLayout( layout, numElements, PassDesc.pIAInputSignature,
-		PassDesc.IAInputSignatureSize, &g_pVertexLayout );
+	hr = g_pd3dDevice->CreateInputLayout( layout, numElements, pVSBlob->GetBufferPointer(),
+        pVSBlob->GetBufferSize(), &g_pVertexLayout );
 	if( FAILED( hr ) )
 		return hr;
 
 	// Set the input layout
-	g_pd3dDevice->IASetInputLayout( g_pVertexLayout );
+	g_pd3dDeviceCon->IASetInputLayout( g_pVertexLayout );
 
 
 
@@ -553,32 +640,32 @@ HRESULT InitDevice()
 	vector<const wchar_t *> textures;
 	vector<const wchar_t *> normalMap;
 
-	textures.push_back( L"../assets/Textures/CommandoArmor_DM.dds" );
-	textures.push_back( L"../assets/Textures/Commando_DM.dds" );
-	normalMap.push_back( L"../assets/Textures/CommandoArmor_NM.dds" );
-	normalMap.push_back( L"../assets/Textures/Commando_NM.dds" );
-	charLoad( "../assets/Models/bigbadman.fbx", &textures, &normalMap );
+	textures.push_back( L"../../assets/Textures/CommandoArmor_DM.dds" );
+	textures.push_back( L"../../assets/Textures/Commando_DM.dds" );
+	normalMap.push_back( L"../../assets/Textures/CommandoArmor_NM.dds" );
+	normalMap.push_back( L"../../assets/Textures/Commando_NM.dds" );
+	charLoad( "../../assets/Models/bigbadman.fbx", &textures, &normalMap );
 
-	textures.push_back( L"../assets/Textures/PRP_Log_A_DM.dds" );
-	textures.push_back( L"../assets/Textures/PRP_TreeLeaves_A.dds" );
-	normalMap.push_back( L"../assets/Textures/PRP_Log_A_NM.dds" );
-	normalMap.push_back( L"../assets/Textures/PRP_Log_A_NM.dds" );
-	charLoad( "../assets/Models/PRP_TREE_A.fbx", &textures, &normalMap );
+	textures.push_back( L"../../assets/Textures/PRP_Log_A_DM.dds" );
+	textures.push_back( L"../../assets/Textures/PRP_TreeLeaves_A.dds" );
+	normalMap.push_back( L"../../assets/Textures/PRP_Log_A_NM.dds" );
+	normalMap.push_back( L"../../assets/Textures/PRP_Log_A_NM.dds" );
+	charLoad( "../../assets/Models/PRP_TREE_A.fbx", &textures, &normalMap );
 
 	createPlane();
 	/////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// Set vertex buffer
-	g_pd3dDevice->IASetVertexBuffers( 0, 1, &characters[characterIndex].vertexBuffer, &stride, &offset );
+	g_pd3dDeviceCon->IASetVertexBuffers( 0, 1, &characters[characterIndex].vertexBuffer, &stride, &offset );
 
 	// Set index buffer
 	//g_pd3dDevice->IASetIndexBuffer( characters[characterIndex].indexBuffer, DXGI_FORMAT_R32_UINT, 0 );
 
 	// Set primitive topology
-	g_pd3dDevice->IASetPrimitiveTopology( D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST );
+	g_pd3dDeviceCon->IASetPrimitiveTopology( D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST );
 
 	// Set textures
-	g_ptextureArrayPtr->SetResourceArray(&characters[characterIndex].texArray[0], 0, characters[characterIndex].texArray.size());
+//	g_ptextureArrayPtr->SetResourceArray(&characters[characterIndex].texArray[0], 0, characters[characterIndex].texArray.size());
 
 	vLightDirs.push_back( D3DXVECTOR4( 0.0f, 1.0f, 0.0f, 1.0f ) );
 	vLightColor.push_back( D3DXVECTOR4( 1.0, 1.0, 1.0, 1.0 ) );
@@ -613,10 +700,10 @@ HRESULT InitDevice()
 
 	camfunc();
 
-	ZeroMemory( &raster, sizeof(D3D10_RASTERIZER_DESC));
+	ZeroMemory( &raster, sizeof(D3D11_RASTERIZER_DESC));
 
-	raster.FillMode = D3D10_FILL_SOLID;
-	raster.CullMode = D3D10_CULL_NONE;
+	raster.FillMode = D3D11_FILL_SOLID;
+	raster.CullMode = D3D11_CULL_NONE;
 	raster.FrontCounterClockwise = FALSE;
 	raster.DepthBias = 0;
 	raster.DepthBiasClamp = 0.0f;
@@ -627,7 +714,7 @@ HRESULT InitDevice()
 	raster.AntialiasedLineEnable = FALSE;
 
 	hr = g_pd3dDevice->CreateRasterizerState (&raster, &pState);
-	g_pd3dDevice->RSSetState( pState );
+	g_pd3dDeviceCon->RSSetState( pState );
 
 	return TRUE;
 }
@@ -638,7 +725,7 @@ HRESULT InitDevice()
 //--------------------------------------------------------------------------------------
 void CleanupDevice()
 {
-	if( g_pd3dDevice ) g_pd3dDevice->ClearState();
+	if( g_pd3dDevice ) g_pd3dDeviceCon->ClearState();
 
 	if( g_pVertexBuffer ) g_pVertexBuffer->Release();
 	if( g_pIndexBuffer ) g_pIndexBuffer->Release();
@@ -687,14 +774,10 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 				camfunc();
 				break;
 			case 'L':
-				raster.FillMode = D3D10_FILL_WIREFRAME;
-				g_pd3dDevice->CreateRasterizerState (&raster, &pState);
-				g_pd3dDevice->RSSetState( pState );
+				g_pTechnique = g_pEffect->GetTechniqueByName( "Render" );
 				break;	
 			case 'K':
-				raster.FillMode = D3D10_FILL_SOLID;
-				g_pd3dDevice->CreateRasterizerState (&raster, &pState);
-				g_pd3dDevice->RSSetState( pState );
+				g_pTechnique = g_pEffect->GetTechniqueByName( "RenderNormalMap" );
 				break;
 			case VK_RIGHT:
 				// Right arrow pressed
@@ -704,11 +787,11 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 				if( characterIndex == characters.size() )
 					characterIndex = 0;
 
-				g_pd3dDevice->IASetVertexBuffers( 0, 1, &characters[characterIndex].vertexBuffer, &stride, &offset );
+				g_pd3dDeviceCon->IASetVertexBuffers( 0, 1, &characters[characterIndex].vertexBuffer, &stride, &offset );
 				// Set index buffer
 //				g_pd3dDevice->IASetIndexBuffer( characters[characterIndex].indexBuffer, DXGI_FORMAT_R32_UINT, 0 );
-				g_ptextureArrayPtr->SetResourceArray(&characters[characterIndex].texArray[0], 0, characters[characterIndex].texArray.size());
-				g_pNormalArrayPtr->SetResourceArray(&characters[characterIndex].texArray[0], 0, characters[characterIndex].texArray.size());
+//				g_ptextureArrayPtr->SetResourceArray(&characters[characterIndex].texArray[0], 0, characters[characterIndex].texArray.size());
+	//			g_pNormalArrayPtr->SetResourceArray(&characters[characterIndex].texArray[0], 0, characters[characterIndex].texArray.size());
 
 				break;
 			case VK_LEFT:
@@ -717,11 +800,11 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 				characterIndex--;
 				if( characterIndex < 0 )
 					characterIndex = characters.size() - 1;
-				g_pd3dDevice->IASetVertexBuffers( 0, 1, &characters[characterIndex].vertexBuffer, &stride, &offset );
+				g_pd3dDeviceCon->IASetVertexBuffers( 0, 1, &characters[characterIndex].vertexBuffer, &stride, &offset );
 				// Set index buffer
 //				g_pd3dDevice->IASetIndexBuffer( characters[characterIndex].indexBuffer, DXGI_FORMAT_R32_UINT, 0 );
-				g_ptextureArrayPtr->SetResourceArray(&characters[characterIndex].texArray[0], 0, characters[characterIndex].texArray.size());
-				g_pNormalArrayPtr->SetResourceArray(&characters[characterIndex].texArray[0], 0, characters[characterIndex].texArray.size());
+	//			g_ptextureArrayPtr->SetResourceArray(&characters[characterIndex].texArray[0], 0, characters[characterIndex].texArray.size());
+	//			g_pNormalArrayPtr->SetResourceArray(&characters[characterIndex].texArray[0], 0, characters[characterIndex].texArray.size());
 				
 				break;
 			case VK_UP:
@@ -779,55 +862,77 @@ void DrawScene()
 {
 	// 1st Cube: Rotate around the origin
 	t += 3.14159/200000;
-	D3DXMatrixRotationY( &g_World1, t );
+	//D3DXMatrixRotationY( &g_World1, t );
 	
 	// Clear the back buffer
-	g_pd3dDevice->ClearRenderTargetView( g_pRenderTargetView, COLOR );
+	g_pd3dDeviceCon->ClearRenderTargetView( g_pRenderTargetView, COLOR );
 
 	// Clear the depth buffer to 1.0 (max depth)
-	g_pd3dDevice->ClearDepthStencilView( g_pDepthStencilView, D3D10_CLEAR_DEPTH, 1.0f, 0 );
+	g_pd3dDeviceCon->ClearDepthStencilView( g_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0 );
 
 	//
 	// Update variables for the first cube
 	//
-	g_pWorldVariable->SetMatrix( ( float* )&g_World1 );
-	g_pViewVariable->SetMatrix( ( float* )&g_View );
-	g_pProjectionVariable->SetMatrix( ( float* )&g_Projection );
+	//g_pWorldVariable->SetMatrix( ( float* )&g_World1 );
+	//g_pViewVariable->SetMatrix( ( float* )&g_View );
+	//g_pProjectionVariable->SetMatrix( ( float* )&g_Projection );
 
 	//
 	// Update lighting variables
 	//
-	g_pLightDirVariable->SetFloatVectorArray( (float*)&vLightDirs[0], 0, vLightDirs.size() );
-	g_pLightColorVariable->SetFloatVectorArray( (float*)&vLightColor[0], 0, vLightColor.size() );
+//	g_pLightDirVariable->SetFloatVectorArray( (float*)&vLightDirs[0], 0, vLightDirs.size() );
+//	g_pLightColorVariable->SetFloatVectorArray( (float*)&vLightColor[0], 0, vLightColor.size() );
 
 
 	// some more variables
-	g_ptextureSelectVariable->AsScalar()->SetInt( texdex );
-	g_ptextureAlphaVariable->SetInt( characters[characterIndex].alpha );
+//	g_ptextureSelectVariable->AsScalar()->SetInt( texdex );
+//	g_ptextureAlphaVariable->SetInt( characters[characterIndex].alpha );
 
-	g_pNormalArrayPtr->SetResourceArray(&characters[characterIndex].NormArray[0], 0, characters[characterIndex].texArray.size());
+	//g_pNormalArrayPtr->SetResourceArray(&characters[characterIndex].NormArray[0], 0, characters[characterIndex].texArray.size());
 
-	g_pd3dDevice->IASetVertexBuffers( 0, 1, &characters[characterIndex].vertexBuffer, &stride, &offset );
-	D3D10_TECHNIQUE_DESC techDesc;
-	g_pTechnique->GetDesc( &techDesc );
-	for( UINT p = 0; p < techDesc.Passes; ++p )
-	{
-		g_pTechnique->GetPassByIndex( p )->Apply( 0 );
-		g_pd3dDevice->Draw(	characters[characterIndex].vertices.size(), 0 );
-	}
+	 ConstantBuffer cb1;
+	D3DXMatrixTranspose( &g_World1, &g_World1) ;
+	D3DXMatrixTranspose( &g_View, &g_View ) ;
+	D3DXMatrixTranspose( &g_Projection, &g_Projection) ;
 	
-	g_pd3dDevice->IASetVertexBuffers( 0, 1, &terrain.vertexBuffer, &stride, &offset );
-	//Set index buffer
+	
+	cb1.mView =	g_View;
+	cb1.mProjection =  g_Projection;
+	cb1.mWorld = g_World1;
+	g_pd3dDeviceCon->UpdateSubresource( g_pConstantBuffer, 0, NULL, &cb1, 0, 0 );
+	g_pd3dDeviceCon->VSSetConstantBuffers( 0, 1, &g_pConstantBuffer );
+
+	g_pd3dDeviceCon->IASetVertexBuffers( 0, 1, &characters[characterIndex].vertexBuffer, &stride, &offset );
+	/*D3DX11_TECHNIQUE_DESC techDesc;
 	g_pTechnique->GetDesc( &techDesc );
 	for( UINT p = 0; p < techDesc.Passes; ++p )
 	{
-		g_pTechnique->GetPassByIndex( p )->Apply( 0 );
-		g_pd3dDevice->Draw(	terrain.vertices.size(), 0 );
-	}
+		g_pTechnique->GetPassByIndex( p )->Apply( 0, g_pd3dDeviceCon );
+		g_pd3dDeviceCon->Draw(	characters[characterIndex].vertices.size(), 0 );
+	}*/
 
+	g_pd3dDeviceCon->VSSetShader( g_pVertexShader, NULL, 0 );
+	g_pd3dDeviceCon->PSSetShader( g_pPixelShader, NULL, 0 );
+	g_pd3dDeviceCon->Draw(	characters[characterIndex].vertices.size(), 0 );
+
+	g_pd3dDeviceCon->IASetVertexBuffers( 0, 1, &terrain.vertexBuffer, &stride, &offset );
+
+	g_pd3dDeviceCon->VSSetShader( g_pVertexShader, NULL, 0 );
+	g_pd3dDeviceCon->PSSetShader( g_pPixelShader, NULL, 0 );
+	g_pd3dDeviceCon->Draw(	terrain.vertices.size(), 0 );
+	//Set index buffer
+	/*g_pTechnique->GetDesc( &techDesc );
+	for( UINT p = 0; p < techDesc.Passes; ++p )
+	{
+		g_pTechnique->GetPassByIndex( p )->Apply( 0, g_pd3dDeviceCon );
+		g_pd3dDeviceCon->Draw(	terrain.vertices.size(), 0 );
+	}
+*/
 	//
 	// Present our back buffer to our front buffer
 	//
+
+
 	g_pSwapChain->Present( 0, 0 );
 }
 
